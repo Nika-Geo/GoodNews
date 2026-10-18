@@ -9,3 +9,4 @@ published_news.db
 .news_db/
 
 .env
+.env*
