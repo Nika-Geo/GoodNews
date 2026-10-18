@@ -1,0 +1,73 @@
+name: Publish good news to Telegram
+
+on:
+  schedule:
+    # ⏰ ВАЖНО: GitHub Actions cron всегда работает в UTC!
+    # '0 3,9,15,21 * * *' = каждый день в 08:00, 14:00, 20:00 и ровно 00:00
+    # в вашем локальном времени — настройте workflow в Settings → General →
+    # "All times are in the following time zone" (например, Europe/Moscow).
+    # Если хотите строго 4 запуска ДО полуночи (без 00:00) — замените на '0 4,10,16,22 * * *'.
+    # Запусков после полуночи нет — расписание «до 24:00» соблюдено.
+    - cron: '0 3,9,15 * * *'
+  workflow_dispatch: {}               # возможность ручного запуска из вкладки Actions
+
+# Не запускать два соседних крона одновременно (гонка за запись БД-кэша)
+concurrency:
+  group: news-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'                 # кэш pip, если есть requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else
+            pip install "python-telegram-bot>=21.0" feedparser requests
+          fi
+
+      # Восстанавливаем историю опубликованных новостей из кэша.
+      # Файловая система раннера не сохраняется между запусками,
+      # поэтому дедупликация (SQLite) держится через actions/cache.
+      - name: Restore published-news history DB
+        uses: actions/cache@v4
+        with:
+          path: .news_db
+          key: published-news-db-${{ github.run_id }}
+          restore-keys: |
+            published-news-db-
+
+      - name: Run news bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL_USERNAME: ${{ vars.CHANNEL_USERNAME }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DEEPL_API_KEY: ${{ secrets.DEEPL_API_KEY }}
+          DB_CACHE_DIR: .news_db
+        run: |
+          mkdir -p .news_db
+          touch .news_db/.keep
+          python news_bot.py
+
+      # Обновляем кэш после публикации (в SQLite добавились новые записи).
+      - name: Save updated history DB
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .news_db
+          key: published-news-db-${{ github.run_id }}
