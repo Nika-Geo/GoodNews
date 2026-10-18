@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -45,7 +45,7 @@ jobs:
       # Файловая система раннера не сохраняется между запусками,
       # поэтому дедупликация (SQLite) держится через actions/cache.
       - name: Restore published-news history DB
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .news_db
           key: published-news-db-${{ github.run_id }}
@@ -66,7 +66,7 @@ jobs:
 
       # Обновляем кэш после публикации (в SQLite добавились новые записи).
       - name: Save updated history DB
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         if: always()
         with:
           path: .news_db
