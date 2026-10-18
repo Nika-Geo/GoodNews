@@ -1,0 +1,11 @@
+# Локальные артефакты — не должны попадать в репозиторий
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# База истории публикаций (в CI живёт в actions/cache, локально — в .news_db/)
+published_news.db
+.news_db/
+
+.env
