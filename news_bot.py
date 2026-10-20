@@ -25,7 +25,8 @@ RSS_FEEDS = [
     "https://lenta.ru/rss",
     "https://www.cnews.ru/inc/rss/news.xml",
     "https://www.goodnewsnetwork.org/feed/",
-    "https://positive.news/feed/",
+    "https://positive.news/feed/"
+    "https://www.goodgoodgood.co/articles/rss.xml",
 ]
 
 TARGET_LANGUAGE = "RU"
