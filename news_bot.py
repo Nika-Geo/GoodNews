@@ -491,11 +491,11 @@ async def send_to_admins(message: str, link: str, title: str) -> bool:
     """Рассылает готовый пост каждому админу в личку с ботом.
     Админ копирует сообщение (Copy message) и вставляет в канал."""
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    admin_ids_raw = os.environ.get("ADMIN_CHAT_ID", "")
+    admin_ids_raw = os.environ.get("ADMINS_CHAT_ID", "")
     admin_ids = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
 
     if not admin_ids:
-        logger.error("❌ ADMIN_CHAT_ID не задан — некому отправлять")
+        logger.error("❌ ADMINS_CHAT_ID не задан — некому отправлять")
         return False
 
     ok_count = 0
