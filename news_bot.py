@@ -10,6 +10,9 @@ import os
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
+# ============ SETTINGS ============
+# Все секреты берутся из переменных окружения (GitHub Actions Secrets),
+# чтобы токены не попадали в репозиторий.
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]   # Secret: сгенерирован @BotFather
 CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME")  # Variable: username канала с @
 
@@ -23,7 +26,7 @@ RSS_FEEDS = [
 ]
 
 TARGET_LANGUAGE = "RU"
-NEWS_PER_FEED = 6         # Берём по 6 новости из каждого фида
+NEWS_PER_FEED = 4          # Берём по 4 новости из каждого фида
 MIN_SCORE = 7              # Минимальный балл для публикации
 
 # В GitHub Actions временная файловая система не сохраняется между запусками,
@@ -35,82 +38,6 @@ HISTORY_KEEP_DAYS = 30     # Сколько дней хранить истори
 
 SUMMARY_MAX_WORDS = 120    # Ориентировочная длина саммари (в словах)
 ARTICLE_MAX_CHARS = 12000  # Максимум текста статьи, отправляемого в Groq
-
-# ============================================================
-#           СТОП-СЛОВА И ПАТТЕРНЫ ФИЛЬТРАЦИИ
-# ============================================================
-# Полные слова — проверяются по границам слова (регистронезависимо).
-# Паттерны со звёздочкой (*) — проверяются как часть слова:
-#   "бомб*"   — блокирует слова, начинающиеся на "бомб" (бомба, бомбардировка...)
-#   "*офобия" — блокирует слова, заканчивающиеся на "офобия" (русофобия, ксенофобия...)
-#   "под*ем"  — блокирует слова с "под" ... "ем" в середине
-# Проверка идёт по заголовку И тексту (summary + full_text).
-BLOCKED_WORDS = [
-    # --- Полные слова (точное совпадение по границам слова) ---
-    "русофоб*",
-    "войн*",
-    "военн*",          # префикс — блокирует "военный", "военных", "военная"...
-    "подполь*",
-    "террор*",
-    "стрельб*",
-    "ЛГБТ",
-    "квир*",
-    "геи",
-    "гей",
-    "гея*", 
-    "лесбиян*",
-    "вторжен*",
-    "транс*",
-    "теракт*",
-    "погиб*",          # блокирует "погиб", "погибли", "погибших"...
-    "бомб*",          # бомба, бомбардировка, бомбоубежище...
-    "ракет*",         # ракета, ракетный, ракету...
-    "убий*",          # убийца, убийство, убийственный...
-    "расстрел*",      # расстрел, расстрелян...
-    "взрыв*",         # взрыв, взрывной, взрывчатка...
-    "обстрел*",       # обстрел, обстрелян...
-    "разруш*",        # разрушение, разрушен, разрушительный...
-    "погиб*",         # погиб, погибли, погибших...
-    "оккупа*",        # оккупация, оккупант, оккупирован...
-    "геноцид*",       # геноцид, геноцида...
-    "катастроф*",     # катастрофа, катастрофы, катастрофический...
-    "трагеди*",       # трагедия, трагедии, трагический...
-    "жертв*",         # жертва, жертвы, жертвами...
-    "атак*",          # атака, атаки, атаковать...
-    "смерт*",         # смерть, смерти, смертельный...
-    "ранен*",         # ранен, ранены, ранение...
-    "труп*",          # труп, трупы...
-    "murd*",
-    "attack*", 
-    "victim*", 
-    "weapon*",
-    "shelling*",
-    "LGBT",
-    "queer*",
-    "gay*",
-    "lesbi*",
-    "trans-*", 
-    "transgender*", 
-    "femboy*",
-    "furr*",
-    "genocid*",
-    "corps",        # (англ.)
-    "kill*",          # (англ.) kill, killed, killing...
-    "bomb*",          # (англ.) bomb, bombing...
-    "war",
-    "warfare*", 
-    "wartime*",
-    "wars",         # (англ.) war, wars...
-    "massacr*",      # (англ.)
-    "terror*",        # (англ.) terror, terrorism...
-    "shoot*",         # (англ.) shoot, shooting...
-    "dead",          # (англ.) dead, deadly...
-    "deadly", 
-    "died", 
-    "crash*",         # (англ.) crash, crashed...
-    "explos*",     # (англ.)
-    "invasion*",
-]
 # ===================================
 
 logging.basicConfig(
@@ -119,91 +46,6 @@ logging.basicConfig(
     datefmt='%H:%M:%S'
 )
 logger = logging.getLogger(__name__)
-
-
-# ============================================================
-#          ФИЛЬТРАЦИЯ ПО СТОП-СЛОВАМ / ПАТТЕРНАМ
-# ============================================================
-
-def _compile_blocked_patterns(words: list) -> list:
-    """Компилирует список стоп-слов/паттернов в список regex-объектов.
-
-    Правила:
-    - Если паттерн содержит '*', звёздочка заменяется на '\\w*' (любые буквы/цифры).
-    - Если паттерн НЕ содержит '*', он оборачивается в '\\b...\\b' (границы слова).
-    - Всё регистронезависимо (re.IGNORECASE).
-    """
-    compiled = []
-    for word in words:
-        word = word.strip()
-        if not word:
-            continue
-        if '*' in word:
-            # Паттерн с подстановкой: заменяем * на \w* и ищем как подстроку в слове
-            regex_str = re.escape(word).replace(r'\*', r'\w*')
-            # Оборачиваем в границы слова, чтобы "бомб*" не ловило "обомбеть"
-            # Но если * в начале — левая граница не нужна (ищем окончание слова)
-            if word.startswith('*'):
-                regex_str = regex_str + r'\b'
-            elif word.endswith('*'):
-                regex_str = r'\b' + regex_str
-            else:
-                regex_str = r'\b' + regex_str + r'\b'
-        else:
-            # Полное слово — ищем по границам слова
-            regex_str = r'\b' + re.escape(word) + r'\b'
-
-        try:
-            compiled.append(re.compile(regex_str, re.IGNORECASE | re.UNICODE))
-        except re.error as e:
-            logger.warning(f"Невалидный паттерн '{word}': {e}")
-    return compiled
-
-
-# Компилируем паттерны один раз при старте
-_BLOCKED_PATTERNS = _compile_blocked_patterns(BLOCKED_WORDS)
-
-
-def is_blocked_by_words(news: dict) -> tuple:
-    """Проверяет заголовок и текст новости на наличие стоп-слов/паттернов.
-
-    Возвращает (is_blocked: bool, matched_word: str or None).
-    Если найдено совпадение — возвращается первое найденное слово/паттерн.
-    """
-    # Собираем весь проверяемый текст: заголовок + summary + full_text
-    title = clean_html(news.get('title', ''))
-    summary = clean_html(news.get('summary', ''))
-    full_text = news.get('full_text', '')
-    if full_text:
-        full_text = clean_html(full_text)
-
-    # Объединяем для проверки (ограничиваем длину, чтобы regex не тормозил)
-    text_to_check = f"{title} {summary} {full_text}"
-
-    for pattern in _BLOCKED_PATTERNS:
-        match = pattern.search(text_to_check)
-        if match:
-            return True, match.group(0)
-
-    return False, None
-
-
-def filter_blocked_news(news_list: list) -> list:
-    """Фильтрует список новостей, удаляя те, что содержат стоп-слова.
-    Логирует причину блокировки для каждой отклонённой новости."""
-    result = []
-    blocked_count = 0
-    for news in news_list:
-        is_blocked, matched = is_blocked_by_words(news)
-        if is_blocked:
-            blocked_count += 1
-            logger.info(f"🚫 Заблокировано (найдено: «{matched}»): {news['title'][:55]}")
-        else:
-            result.append(news)
-
-    logger.info(f"🔍 Фильтр стоп-слов: пройдено {len(result)}, "
-                f"заблокировано {blocked_count} из {len(news_list)}")
-    return result
 
 
 # ============================================================
@@ -665,17 +507,9 @@ async def main():
         logger.warning("❌ Все новости уже опубликованы — выход")
         return
 
-    # 2.5 ФИЛЬТРАЦИЯ ПО СТОП-СЛОВАМ (до Groq, чтобы не тратить API-вызовы)
-    logger.info("🔍 Фильтрую по стоп-словам...")
-    filtered_news = await asyncio.to_thread(filter_blocked_news, fresh_news)
-
-    if not filtered_news:
-        logger.warning("❌ Все новости заблокированы стоп-словами — выход")
-        return
-
     # 3. Оценка через Groq + сортировка
     logger.info("🤖 Оцениваю новости через Groq...")
-    positive_news = await asyncio.to_thread(filter_positive_news, filtered_news)
+    positive_news = await asyncio.to_thread(filter_positive_news, fresh_news)
 
     if not positive_news:
         logger.warning("❌ Нет позитивных новостей с оценкой ≥ 7")
@@ -688,25 +522,6 @@ async def main():
     # 5. Копируем новость ЦЕЛИКОМ (полный текст статьи со страницы)
     logger.info("📄 Копирую полный текст новости...")
     best = await asyncio.to_thread(fetch_full_article, best)
-
-    # 5.5 Повторная проверка стоп-слов по полному тексту статьи
-    # (RSS-описание могло не содержать запрещённое слово, а полный текст — содержит)
-    is_blocked, matched = is_blocked_by_words(best)
-    if is_blocked:
-        logger.warning(f"🚫 Полная статья заблокирована (найдено: «{matched}»): {best['title'][:55]}")
-        # Берём следующую лучшую новость
-        for candidate in positive_news[1:]:
-            candidate = await asyncio.to_thread(fetch_full_article, candidate)
-            is_blocked2, matched2 = is_blocked_by_words(candidate)
-            if not is_blocked2:
-                best = candidate
-                logger.info(f"🔄 Следующая новость: {best['title'][:55]}")
-                break
-            else:
-                logger.warning(f"🚫 Тоже заблокирована (найдено: «{matched2}»): {candidate['title'][:55]}")
-        else:
-            logger.warning("❌ Все кандидаты заблокированы стоп-словами — выход")
-            return
 
     # 6. Groq: саммари полного текста (эмоции, цитаты, факты) + хэштеги
     logger.info("🤖 Генерирую саммари и хэштеги через Groq...")
