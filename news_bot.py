@@ -23,7 +23,7 @@ RSS_FEEDS = [
 ]
 
 TARGET_LANGUAGE = "RU"
-NEWS_PER_FEED = 6         # Берём по 4 новости из каждого фида
+NEWS_PER_FEED = 6         # Берём по 6 новости из каждого фида
 MIN_SCORE = 7              # Минимальный балл для публикации
 
 # В GitHub Actions временная файловая система не сохраняется между запусками,
@@ -52,15 +52,16 @@ BLOCKED_WORDS = [
     "военн*",          # префикс — блокирует "военный", "военных", "военная"...
     "подполь*",
     "террор*",
-    "стрельб",
+    "стрельб*",
     "ЛГБТ",
-    "квир",
+    "квир*",
     "геи",
     "гей",
+    "гея*", 
     "лесбиян*",
     "вторжен*",
     "транс*",
-    "теракт",
+    "теракт*",
     "погиб*",          # блокирует "погиб", "погибли", "погибших"...
     "бомб*",          # бомба, бомбардировка, бомбоубежище...
     "ракет*",         # ракета, ракетный, ракету...
@@ -80,23 +81,32 @@ BLOCKED_WORDS = [
     "ранен*",         # ранен, ранены, ранение...
     "труп*",          # труп, трупы...
     "murd*",
-    "shelling",
+    "attack*", 
+    "victim*", 
+    "weapon*",
+    "shelling*",
     "LGBT",
     "queer*",
     "gay*",
     "lesbi*",
-    "trans*",
+    "trans-*", 
+    "transgender*", 
     "femboy*",
-    "furry",
+    "furr*",
     "genocid*",
-    "corps*",        # (англ.)
+    "corps",        # (англ.)
     "kill*",          # (англ.) kill, killed, killing...
     "bomb*",          # (англ.) bomb, bombing...
-    "war*",           # (англ.) war, wars...
+    "war",
+    "warfare*", 
+    "wartime*",
+    "wars",         # (англ.) war, wars...
     "massacr*",      # (англ.)
     "terror*",        # (англ.) terror, terrorism...
     "shoot*",         # (англ.) shoot, shooting...
-    "dead*",          # (англ.) dead, deadly...
+    "dead",          # (англ.) dead, deadly...
+    "deadly", 
+    "died", 
     "crash*",         # (англ.) crash, crashed...
     "explos*",     # (англ.)
     "invasion*",
@@ -168,7 +178,7 @@ def is_blocked_by_words(news: dict) -> tuple:
         full_text = clean_html(full_text)
 
     # Объединяем для проверки (ограничиваем длину, чтобы regex не тормозил)
-    text_to_check = f"{title} {summary} {full_text[:5000]}"
+    text_to_check = f"{title} {summary} {full_text}"
 
     for pattern in _BLOCKED_PATTERNS:
         match = pattern.search(text_to_check)
