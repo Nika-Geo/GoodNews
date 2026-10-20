@@ -21,6 +21,9 @@ DEEPL_API_KEY = os.environ["DEEPL_API_KEY"]
 
 RSS_FEEDS = [
     "https://rss.app/feeds/TiEx0NJFPa0Wc5Y2.xml",
+    "https://www.techinsider.ru/out/public-feed-all-news.xml",
+    "https://lenta.ru/rss",
+    "https://www.cnews.ru/inc/rss/news.xml",
     "https://www.goodnewsnetwork.org/feed/",
     "https://positive.news/feed/",
 ]
