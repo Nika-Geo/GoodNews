@@ -465,23 +465,59 @@ def format_news_for_telegram(news: dict) -> str:
 #                      TELEGRAM PUBLISHING
 # ============================================================
 
-async def publish_to_telegram(message: str, link: str, title: str) -> bool:
-    """Отправляет сообщение в канал. Возвращает True при успехе."""
-    try:
-        bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        await bot.send_message(
-            chat_id=CHANNEL_USERNAME,
-            text=message,
-            parse_mode='HTML',
-            disable_web_page_preview=False,
-        )
-        mark_as_published(link, title)
-        logger.info(f"📤 Опубликовано в {CHANNEL_USERNAME}")
-        return True
-    except Exception as e:
-        logger.error(f"Ошибка публикации Telegram: {e}")
+# async def publish_to_telegram(message: str, link: str, title: str) -> bool:
+#     """Отправляет сообщение в канал. Возвращает True при успехе."""
+#     try:
+#         bot = Bot(token=TELEGRAM_BOT_TOKEN)
+#         await bot.send_message(
+#             chat_id=CHANNEL_USERNAME,
+#             text=message,
+#             parse_mode='HTML',
+#             disable_web_page_preview=False,
+#         )
+#         mark_as_published(link, title)
+#         logger.info(f"📤 Опубликовано в {CHANNEL_USERNAME}")
+#         return True
+#     except Exception as e:
+#         logger.error(f"Ошибка публикации Telegram: {e}")
+#         return False
+
+
+# ============================================================
+#                           Send to Admins
+# ============================================================
+
+async def send_to_admins(message: str, link: str, title: str) -> bool:
+    """Рассылает готовый пост каждому админу в личку с ботом.
+    Админ копирует сообщение (Copy message) и вставляет в канал."""
+    bot = Bot(token=TELEGRAM_BOT_TOKEN)
+    admin_ids_raw = os.environ.get("ADMIN_CHAT_ID", "")
+    admin_ids = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
+
+    if not admin_ids:
+        logger.error("❌ ADMIN_CHAT_ID не задан — некому отправлять")
         return False
 
+    ok_count = 0
+    for uid in admin_ids:
+        try:
+            await bot.send_message(
+                chat_id=uid,
+                text=message,
+                parse_mode='HTML',
+                disable_web_page_preview=False,
+            )
+            ok_count += 1
+            logger.info(f"📨 Отправлено админу {uid}")
+        except Exception as e:
+            # Частая причина: админ не нажал /start или заблокировал бота
+            logger.error(f"✗ Не удалось отправить админу {uid}: {e}")
+
+    if ok_count:
+        mark_as_published(link, title)   # чтобы cron не слал повторно
+        logger.info(f"✅ Разослано {ok_count}/{len(admin_ids)} админам: {title[:50]}")
+        return True
+    return False
 
 # ============================================================
 #                           MAIN
@@ -532,8 +568,8 @@ async def main():
     message = await asyncio.to_thread(format_news_for_telegram, best)
 
     logger.info("📤 Публикую в Telegram...")
-    success = await publish_to_telegram(message, best['link'], best['title'])
-
+    success = await send_to_admins(message, best['link'], best['title'])
+    
     logger.info("✅ Готово!" if success else "❌ Публикация не удалась")
 
 
