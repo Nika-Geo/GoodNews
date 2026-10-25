@@ -455,7 +455,7 @@ def format_news_for_telegram(news: dict) -> str:
     # Саммари генерируется Groq на русском, но проверяем язык на всякий случай
     summary = format_paragraphs(summary_raw)
 
-    hashtags = news.get('hashtags', '#хорошиеновости')
+    hashtags = news.get('hashtags', '#антитревога')
 
     return (
         f"✨ <b>{title}</b>\n\n"
