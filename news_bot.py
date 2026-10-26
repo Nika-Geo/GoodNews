@@ -6,29 +6,45 @@ import re
 import html
 from datetime import datetime
 from typing import List, Dict
+import asyncio
+import json
+import logging
+import os
+import re
+import html
+from datetime import datetime
+from typing import List, Dict
 
 import httpx
 import aiosqlite
 import feedparser
 import trafilatura
 from langdetect import detect, LangDetectException
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception, reraise
-from pydantic_settings import BaseSettings
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
+from pydantic import ValidationError
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from telegram import Bot
 
-# ============ SETTINGS ============
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)-7s | %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+# ============ SETTINGS (Pydantic v2 style) ============
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(case_sensitive=False, extra="ignore")
+
     TELEGRAM_BOT_TOKEN: str
     CHANNEL_USERNAME: str
     GROQ_API_KEY: str
     DEEPL_API_KEY: str
     ADMINS_CHAT_ID: str = ""
-    DB_CACHE_DIR: str = "."
 
-    # Модели можно переопределить через Secrets, не трогая код
-    groq_scoring_model: str = "openai/gpt-oss-20b"     # дешёвая для скоринга
-    groq_summary_model: str = "openai/gpt-oss-120b"    # качественная для саммари
+    groq_scoring_model: str = "openai/gpt-oss-20b"
+    groq_summary_model: str = "openai/gpt-oss-120b"
 
     rss_feeds: List[str] = [
         "https://ria.ru/export/rss2/archive/index.xml",
@@ -52,14 +68,17 @@ class Settings(BaseSettings):
         "культура", "наука", "экология", "технологии",
     ]
 
-    class Config:
-        case_sensitive = False
+try:
+    settings = Settings()
+except ValidationError as e:
+    missing = [str(err.get("loc", ("?",))[0]) for err in e.errors()]
+    logger.error(f"❌ Не заданы переменные окружения: {missing}")
+    raise SystemExit(1)
 
+DB_CACHE_DIR = os.environ.get("DB_CACHE_DIR", ".")
+NEWS_HISTORY_DB = os.path.join(DB_CACHE_DIR, "published_news.db")
 
-settings = Settings()
-NEWS_HISTORY_DB = os.path.join(settings.db_cache_dir, "published_news.db")
-
-# Цепочки фолбэка: если модель отключат (404) — автоматически уйдём на следующую.
+# Цепочки фолбэка моделей
 def _dedupe(seq):
     seen, out = set(), []
     for x in seq:
@@ -70,13 +89,6 @@ def _dedupe(seq):
 
 GROQ_SCORING_CHAIN = _dedupe([settings.groq_scoring_model, "openai/gpt-oss-20b", "openai/gpt-oss-120b"])
 GROQ_SUMMARY_CHAIN = _dedupe([settings.groq_summary_model, "openai/gpt-oss-120b", "qwen/qwen3.8-27b"])
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)-7s | %(message)s',
-    datefmt='%H:%M:%S'
-)
-logger = logging.getLogger(__name__)
 
 
 # ============================================================
