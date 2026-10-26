@@ -458,7 +458,7 @@ def format_paragraphs(text: str) -> str:
     if processed_lines and processed_lines[-1] == "":
         processed_lines.pop()
         
-    return "\n".join(processed_lines)
+    return "\n\n".join(processed_lines)
 
 async def force_russian(client: httpx.AsyncClient, text: str) -> str:
     """Если в тексте слишком много латиницы — прогоняем через DeepL принудительно."""
