@@ -12,7 +12,7 @@ import aiosqlite
 import feedparser
 import trafilatura
 from langdetect import detect, LangDetectException
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception, reraise
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 from pydantic_settings import BaseSettings
 from telegram import Bot
 
