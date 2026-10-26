@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str
     CHANNEL_USERNAME: str
     GROQ_API_KEY: str
-    DEEPL_API_KEY: str
+    DEEPL_ _KEY: str
     ADMINS_CHAT_ID: str = ""
 
     groq_scoring_model: str = "openai/gpt-oss-20b"
@@ -500,7 +500,7 @@ async def format_news_for_telegram(client: httpx.AsyncClient, news: Dict) -> str
 # ============================================================
 
 async def send_to_admins(bot: Bot, message: str, link: str, title: str, db: Database) -> bool:
-    admin_ids = [int(x.strip()) for x in settings.admins_chat_id.split(",") if x.strip()]
+    admin_ids = [int(x.strip()) for x in settings.ADMINS_CHAT_ID.split(",") if x.strip()]
     if not admin_ids:
         logger.error("❌ ADMINS_CHAT_ID не задан — некому отправлять")
         return False
