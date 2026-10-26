@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str
     CHANNEL_USERNAME: str
     GROQ_API_KEY: str
-    DEEPL_ _KEY: str
+    DEEPL_KEY: str
     ADMINS_CHAT_ID: str = ""
 
     groq_scoring_model: str = "openai/gpt-oss-20b"
