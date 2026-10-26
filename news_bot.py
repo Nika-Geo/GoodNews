@@ -6,14 +6,6 @@ import re
 import html
 from datetime import datetime
 from typing import List, Dict
-import asyncio
-import json
-import logging
-import os
-import re
-import html
-from datetime import datetime
-from typing import List, Dict
 
 import httpx
 import aiosqlite
@@ -49,7 +41,7 @@ class Settings(BaseSettings):
     rss_feeds: List[str] = [
         "https://ria.ru/export/rss2/archive/index.xml",
         "https://www.goodnewsnetwork.org/feed/",
-        "https://positive.news/feed/",
+        "https://positive.news/feed/", 
         "https://www.goodgoodgood.co/articles/rss.xml",
         "https://www.cnews.ru/inc/rss/news.xml",
         "https://www.techinsider.ru/out/public-feed-all-news.xml",
@@ -78,7 +70,6 @@ except ValidationError as e:
 DB_CACHE_DIR = os.environ.get("DB_CACHE_DIR", ".")
 NEWS_HISTORY_DB = os.path.join(DB_CACHE_DIR, "published_news.db")
 
-# Цепочки фолбэка моделей
 def _dedupe(seq):
     seen, out = set(), []
     for x in seq:
@@ -89,7 +80,6 @@ def _dedupe(seq):
 
 GROQ_SCORING_CHAIN = _dedupe([settings.groq_scoring_model, "openai/gpt-oss-20b", "openai/gpt-oss-120b"])
 GROQ_SUMMARY_CHAIN = _dedupe([settings.groq_summary_model, "openai/gpt-oss-120b", "qwen/qwen3.8-27b"])
-
 
 # ============================================================
 #                   DATABASE (aiosqlite)
@@ -135,43 +125,28 @@ class Database:
             if cursor.rowcount:
                 logger.info(f"🗑  Удалено {cursor.rowcount} старых записей из истории")
 
-
 # ============================================================
 #                     HTTP (httpx + умные ретраи)
 # ============================================================
 
 def _is_transient_error(exc: BaseException) -> bool:
-    """Ретраим ТОЛЬКО временные ошибки. 400/401/404 падают сразу."""
     if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError)):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code in {408, 409, 425, 429, 500, 502, 503, 504}
     return False
 
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception(_is_transient_error),
-    reraise=True,
-)
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), retry=retry_if_exception(_is_transient_error), reraise=True)
 async def fetch_url(client: httpx.AsyncClient, url: str, timeout: float = 30.0) -> str:
     resp = await client.get(url, timeout=timeout)
     resp.raise_for_status()
     return resp.text
 
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception(_is_transient_error),
-    reraise=True,
-)
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), retry=retry_if_exception(_is_transient_error), reraise=True)
 async def post_json(client: httpx.AsyncClient, url: str, headers: dict, data: dict, timeout: float = 60.0) -> dict:
     resp = await client.post(url, headers=headers, json=data, timeout=timeout)
     resp.raise_for_status()
     return resp.json()
-
 
 # ============================================================
 #                     RSS PARSING
@@ -194,14 +169,12 @@ async def fetch_single_feed(client: httpx.AsyncClient, feed_url: str) -> List[Di
         logger.error(f"✗ Ошибка загрузки {feed_url}: {e}")
         return []
 
-
 async def fetch_rss_news() -> List[Dict]:
     async with httpx.AsyncClient(headers={"User-Agent": "Mozilla/5.0 (GoodNewsBot/1.0)"}) as client:
         results = await asyncio.gather(*[fetch_single_feed(client, u) for u in settings.rss_feeds])
     all_entries = [e for sub in results for e in sub]
     logger.info(f"📰 Всего загружено: {len(all_entries)} новостей")
     return all_entries
-
 
 # ============================================================
 #              FULL ARTICLE FETCHING (trafilatura)
@@ -227,7 +200,6 @@ async def fetch_full_article(client: httpx.AsyncClient, news: Dict) -> Dict:
         logger.info("📄 Полная статья недоступна — использую RSS-описание")
     return result
 
-
 # ============================================================
 #                  Groq AI (chain-fallback + JSON)
 # ============================================================
@@ -241,7 +213,6 @@ async def groq_chat(
     json_mode: bool = False,
     reasoning_effort: str = None,
 ) -> str:
-    """Вызов Groq с цепочкой фолбэка моделей и логом тела ошибки."""
     headers = {
         "Authorization": f"Bearer {settings.GROQ_API_KEY}",
         "Content-Type": "application/json",
@@ -256,7 +227,7 @@ async def groq_chat(
         }
         if json_mode:
             data["response_format"] = {"type": "json_object"}
-        # reasoning_effort поддерживается только GPT-OSS — экономит токены на "размышления"
+        
         if reasoning_effort and model.startswith("openai/gpt-oss"):
             data["reasoning_effort"] = reasoning_effort
 
@@ -267,22 +238,18 @@ async def groq_chat(
                 content = (resp['choices'][0]['message'].get('reasoning_content') or '').strip()
             return content
         except httpx.HTTPStatusError as e:
-            # Логируем тело ответа — сразу видно реальную причину от Groq
             logger.error(f"Groq HTTP {e.response.status_code} | model={model} | {e.response.text[:300]}")
             last_error = e
             if e.response.status_code in (400, 404):
-                continue  # модель отключена / параметр не поддержан → следующая в цепочке
+                continue 
             raise
     raise last_error or RuntimeError("Groq: все модели из цепочки недоступны")
-
 
 def _strip_code_fences(text: str) -> str:
     m = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
     return m.group(1).strip() if m else text.strip()
 
-
 def _parse_scores(raw: str, count: int) -> List[int]:
-    """Надёжно достаёт оценки: JSON-массив объектов, массив чисел или числа из текста."""
     try:
         data = json.loads(_strip_code_fences(raw))
     except json.JSONDecodeError:
@@ -307,19 +274,24 @@ def _parse_scores(raw: str, count: int) -> List[int]:
                 scores[idx - 1] = max(1, min(10, val))
     return scores
 
-
 def _chunks(lst: list, size: int):
     for i in range(0, len(lst), size):
         yield lst[i:i + size]
 
-
 async def _score_chunk(client: httpx.AsyncClient, chunk: List[Dict]) -> List[int]:
-    titles = "\n".join(f"{i+1}. {n['title']}" for i, n in enumerate(chunk))
+    # FIX: Добавляем кусок текста (summary) к заголовку для оценки.
+    # Без этого Lenta.ru (пустые description) всегда получают низкий балл.
+    items_text = []
+    for i, n in enumerate(chunk):
+        # Берем заголовок + первые 200 символов описания для контекста
+        snippet = clean_html(n.get('summary', ''))[:200]
+        items_text.append(f"{i+1}. Заголовок: {n['title']}\n   Текст: {snippet}")
+    
     prompt = (
         "Оцени каждую новость по шкале 1–10 (1 — очень негативная, 10 — очень позитивная).\n"
         "Верни СТРОГО JSON-массив без пояснений.\n"
         'Формат: [{"index": 1, "score": 8}, {"index": 2, "score": 5}]\n\n'
-        f"Новости:\n{titles}"
+        f"Новости:\n" + "\n".join(items_text)
     )
     raw = await groq_chat(
         client, prompt, GROQ_SCORING_CHAIN,
@@ -328,9 +300,7 @@ async def _score_chunk(client: httpx.AsyncClient, chunk: List[Dict]) -> List[int
     )
     return _parse_scores(raw, len(chunk))
 
-
 async def score_news_batch(client: httpx.AsyncClient, news_list: List[Dict]) -> List[Dict]:
-    """Батчинг: чанки по 10 новостей, параллельно, с фолбэком."""
     if not news_list:
         return []
     chunks = list(_chunks(news_list, 10))
@@ -353,14 +323,12 @@ async def score_news_batch(client: httpx.AsyncClient, news_list: List[Dict]) -> 
             logger.info(f"{emoji} [{sc:2}/10] {news['title'][:55]}")
     return scored
 
-
 async def filter_positive_news(client: httpx.AsyncClient, news_list: List[Dict]) -> List[Dict]:
     scored = await score_news_batch(client, news_list)
     positive = [n for n in scored if n.get('score', 0) >= settings.min_score]
     positive.sort(key=lambda x: x.get('score', 0), reverse=True)
     logger.info(f"🏆 Отобрано {len(positive)} позитивных из {len(news_list)}")
     return positive
-
 
 async def summarize_and_tag_via_groq(client: httpx.AsyncClient, news: Dict) -> Dict:
     result = news.copy()
@@ -382,9 +350,11 @@ async def summarize_and_tag_via_groq(client: httpx.AsyncClient, news: Dict) -> D
     )
 
     try:
+        # FIX: Увеличен max_tokens до 2048, чтобы reasoning-модель не обрезала JSON
+        # FIX: Добавлен reasoning_effort="low" для экономии
         raw = await groq_chat(
             client, prompt, GROQ_SUMMARY_CHAIN,
-            temperature=0.4, max_tokens=1024, json_mode=True,
+            temperature=0.4, max_tokens=2048, json_mode=True, reasoning_effort="low"
         )
         data = json.loads(_strip_code_fences(raw))
         summary_part = data.get('summary', '').strip()
@@ -416,7 +386,6 @@ async def summarize_and_tag_via_groq(client: httpx.AsyncClient, news: Dict) -> D
         result['hashtags'] = "#хорошиеновости"
     return result
 
-
 # ============================================================
 #                     LANGUAGE + DeepL
 # ============================================================
@@ -429,13 +398,7 @@ def is_russian(text: str) -> bool:
     except LangDetectException:
         return False
 
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception(_is_transient_error),
-    reraise=True,
-)
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), retry=retry_if_exception(_is_transient_error), reraise=True)
 async def translate_text(client: httpx.AsyncClient, text: str) -> str:
     if not text or not text.strip():
         return text
@@ -449,7 +412,6 @@ async def translate_text(client: httpx.AsyncClient, text: str) -> str:
         logger.warning(f"DeepL error, returning original: {e}")
         return text
 
-
 async def maybe_translate(client: httpx.AsyncClient, text: str) -> str:
     if not text or not text.strip():
         return text
@@ -458,7 +420,6 @@ async def maybe_translate(client: httpx.AsyncClient, text: str) -> str:
         return text
     logger.info("🌍 Текст не на русском — перевожу через DeepL...")
     return await translate_text(client, text)
-
 
 # ============================================================
 #                     HTML HELPERS
@@ -471,15 +432,12 @@ def clean_html(text: str) -> str:
     text = html.unescape(text)
     return re.sub(r'\s+', ' ', text).strip()
 
-
 def escape_html(text: str) -> str:
     return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
-
 
 def format_paragraphs(text: str) -> str:
     escaped = escape_html(text)
     return re.sub(r'\n{3,}', '\n\n', escaped).strip()
-
 
 async def format_news_for_telegram(client: httpx.AsyncClient, news: Dict) -> str:
     title_raw = clean_html(news['title'])
@@ -494,13 +452,15 @@ async def format_news_for_telegram(client: httpx.AsyncClient, news: Dict) -> str
         f"{hashtags}"
     )
 
-
 # ============================================================
 #                      TELEGRAM PUBLISHING
 # ============================================================
 
 async def send_to_admins(bot: Bot, message: str, link: str, title: str, db: Database) -> bool:
-    admin_ids = [int(x.strip()) for x in settings.ADMINS_CHAT_ID.split(",") if x.strip()]
+    # Читаем напрямую из переменной окружения, если в settings пусто (страховка)
+    admins_raw = settings.ADMINS_CHAT_ID or os.environ.get("ADMINS_CHAT_ID", "")
+    admin_ids = [int(x.strip()) for x in admins_raw.split(",") if x.strip()]
+    
     if not admin_ids:
         logger.error("❌ ADMINS_CHAT_ID не задан — некому отправлять")
         return False
@@ -519,7 +479,6 @@ async def send_to_admins(bot: Bot, message: str, link: str, title: str, db: Data
         logger.info(f"✅ Разослано {ok_count}/{len(admin_ids)} админам: {title[:50]}")
         return True
     return False
-
 
 # ============================================================
 #                           MAIN
@@ -569,7 +528,6 @@ async def main():
     bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
     success = await send_to_admins(bot, message, best['link'], best['title'], db)
     logger.info("✅ Готово!" if success else "❌ Публикация не удалась")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
