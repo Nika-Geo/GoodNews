@@ -336,23 +336,21 @@ async def summarize_and_tag_via_groq(client: httpx.AsyncClient, news: Dict) -> D
     tag_list = ", ".join(settings.allowed_hashtags)
 
     prompt = (
-        "Ты — редактор канала добрых новостей. Прочитай новость и верни СТРОГО валидный JSON.\n\n"
+        "Ты — редактор канала добрых новостей. Твоя задача — написать пост НА РУССКОМ ЯЗЫКЕ.\n"
+        "СТРОГОЕ ПРАВИЛО: Весь текст, включая цитаты и имена, должен быть ТОЛЬКО на русском языке. Никаких английских слов, даже в цитатах — переводи их смысл на русский.\n\n"
         "Требования к саммари:\n"
         f"- Объём до {settings.summary_max_words} слов\n"
         "- Сохрани эмоциональную окраску (радость, тепло, воодушевление)\n"
         "- Включи ключевые факты: имена, числа, места, даты\n"
-        "- Если есть яркие цитаты героев, включи 1-2 в кавычках\n"
-        "- Используй подходящие эмоджи\n"
-        "- Выделяй абзацы, между абзацами должна быть пустая строка\n\n"
-        f"Хэштеги: выбери от 1 до 4 СТРОГО из списка [{tag_list}]. Не придумывай других.\n\n"
-        'Формат ответа: {"summary": "текст саммари", "hashtags": ["#тег1", "#тег2"]}\n\n'
+        "- Если есть цитаты героев — переведи их на русский и оформи в кавычках\n"
+        "- Разбей текст на абзацы для легкости чтения\n\n"
+        f"Хэштеги: выбери от 1 до 4 СТРОГО из списка [{tag_list}].\n\n"
+        'Формат ответа (JSON): {"summary": "текст саммари", "hashtags": ["#тег1", "#тег2"]}\n\n'
         f"ЗАГОЛОВОК: {clean_html(news['title'])}\n\n"
         f"ТЕКСТ НОВОСТИ:\n{article}"
     )
 
     try:
-        # FIX: Увеличен max_tokens до 2048, чтобы reasoning-модель не обрезала JSON
-        # FIX: Добавлен reasoning_effort="low" для экономии
         raw = await groq_chat(
             client, prompt, GROQ_SUMMARY_CHAIN,
             temperature=0.4, max_tokens=2048, json_mode=True, reasoning_effort="low"
@@ -437,15 +435,52 @@ def escape_html(text: str) -> str:
     return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
 
 def format_paragraphs(text: str) -> str:
+    """Экранирует HTML и принудительно делает двойные переносы для Telegram."""
     escaped = escape_html(text)
-    return re.sub(r'\n{3,}', '\n\n', escaped).strip()
+    # Если модель вернула один \n, превращаем его в <br>, чтобы Telegram увидел перенос
+    # Но лучше разбивать на абзацы.
+    
+    # 1. Убираем лишние пробелы
+    escaped = re.sub(r'[ \t]+', ' ', escaped)
+    
+    # 2. Превращаем одиночные переносы в двойные (для визуального отступа в TG)
+    # Или заменяем на <br><br>
+    escaped = escaped.replace('\n', '<br>') 
+    
+    # 3. Убираем множественные br подряд, оставляем максимум два (один пустой абзац)
+    escaped = re.sub(r'(<br>){3,}', '<br><br>', escaped)
+    
+    return escaped.strip()
+
+async def force_russian(client: httpx.AsyncClient, text: str) -> str:
+    """Если в тексте слишком много латиницы — прогоняем через DeepL принудительно."""
+    if not text:
+        return text
+    
+    # Считаем количество латинских букв
+    latin_chars = len(re.findall(r'[a-zA-Z]', text))
+    total_chars = len(text)
+    
+    # Если латиницы больше 15% — считаем, что перевод кривой
+    if total_chars > 0 and (latin_chars / total_chars) > 0.15:
+        logger.warning("⚠️ Обнаружено много английского в саммари — принудительный перевод через DeepL")
+        return await translate_text(client, text)
+    
+    return text
 
 async def format_news_for_telegram(client: httpx.AsyncClient, news: Dict) -> str:
     title_raw = clean_html(news['title'])
     title = escape_html(await maybe_translate(client, title_raw))
+    
     summary_raw = news.get('ai_summary') or clean_html(news.get('summary', ''))
+    
+    # --- ДОБАВЛЕНО: Принудительная проверка на английский ---
+    summary_raw = await force_russian(client, summary_raw)
+    # -------------------------------------------------------
+
     summary = format_paragraphs(summary_raw)
     hashtags = escape_html(news.get('hashtags', '#хорошиеновости'))
+    
     return (
         f"✨ <b>{title}</b>\n\n"
         f"{summary}\n\n"
