@@ -41,7 +41,8 @@ class Settings(BaseSettings):
     rss_feeds: List[str] = [
         "https://ria.ru/export/rss2/archive/index.xml",
         "https://www.goodnewsnetwork.org/feed/",
-        "https://positive.news/feed/", 
+
+"https://www.positive.news/feed/", 
         "https://www.goodgoodgood.co/articles/rss.xml",
         "https://www.cnews.ru/inc/rss/news.xml",
         "https://www.techinsider.ru/out/public-feed-all-news.xml",
