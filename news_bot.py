@@ -80,7 +80,7 @@ def _dedupe(seq):
     return out
 
 GROQ_SCORING_CHAIN = _dedupe([settings.groq_scoring_model, "openai/gpt-oss-20b", "openai/gpt-oss-120b"])
-GROQ_SUMMARY_CHAIN = _dedupe([settings.groq_summary_model, "openai/gpt-oss-120b", "qwen/qwen3.8-27b"])
+GROQ_SUMMARY_CHAIN = _dedupe([settings.groq_summary_model, "qwen/qwen3.8-27b"])
 
 # ============================================================
 #                   DATABASE (aiosqlite)
