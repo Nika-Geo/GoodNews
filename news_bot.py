@@ -36,13 +36,12 @@ class Settings(BaseSettings):
     ADMINS_CHAT_ID: str = ""
 
     groq_scoring_model: str = "openai/gpt-oss-20b"
-    groq_summary_model: str = "openai/gpt-oss-120b"
+    groq_summary_model: str = "qwen/qwen3.8-27b"
 
     rss_feeds: List[str] = [
         "https://ria.ru/export/rss2/archive/index.xml",
         "https://www.goodnewsnetwork.org/feed/",
-
-"https://www.positive.news/feed/", 
+        "https://www.positive.news/feed/", 
         "https://www.goodgoodgood.co/articles/rss.xml",
         "https://www.cnews.ru/inc/rss/news.xml",
         "https://www.techinsider.ru/out/public-feed-all-news.xml",
