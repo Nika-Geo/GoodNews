@@ -49,9 +49,9 @@ class Settings(BaseSettings):
     ]
 
     target_language: str = "RU"
-    news_per_feed: int = 4
+    news_per_feed: int = 8
     min_score: int = 7
-    summary_max_words: int = 120
+    summary_max_words: int = 200
     article_max_chars: int = 12000
     history_keep_days: int = 30
 
