@@ -466,7 +466,7 @@ def format_paragraphs(text: str) -> str:
     if processed_lines and processed_lines[-1] == "":
         processed_lines.pop()
         
-    return "\n\n".join(processed_lines)
+    return "\n".join(processed_lines)
 
 async def force_russian(client: httpx.AsyncClient, text: str) -> str:
     """Если в тексте слишком много латиницы — прогоняем через DeepL принудительно."""
@@ -498,8 +498,8 @@ async def format_news_for_telegram(client: httpx.AsyncClient, news: Dict) -> str
     hashtags = escape_html(news.get('hashtags', '#хорошиеновости'))
     
     return (
-        f"✨ <b>{title}</b>\n"
-        f"{summary}\n"
+        f"✨ <b>{title}</b>\n\n"
+        f"{summary}\n\n"
         f"🔗 <a href=\"{news['link']}\">Читать новость полностью</a>\n\n"
         f"{hashtags}"
     )
